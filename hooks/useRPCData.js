@@ -3,6 +3,7 @@ import { useQueries } from "@tanstack/react-query";
 import axios from "axios";
 
 const refetchInterval = 60_000;
+const defaultTimeout = 5_000;
 
 export const rpcBody = JSON.stringify({
   jsonrpc: "2.0",
@@ -11,7 +12,7 @@ export const rpcBody = JSON.stringify({
   id: 1,
 });
 
-const fetchChain = async (baseURL) => {
+const fetchChain = async (baseURL, timeout = 0) => {
   if (baseURL.includes("API_KEY")) return null;
   try {
     let API = axios.create({
@@ -20,6 +21,10 @@ const fetchChain = async (baseURL) => {
         "Content-Type": "application/json",
       },
     });
+
+    if (timeout !== 0) {
+      API.defaults.timeout = timeout;
+    }
 
     API.interceptors.request.use(function (request) {
       request.requestStart = Date.now();
@@ -60,10 +65,10 @@ const formatData = (url, data) => {
   return { url, height, latency };
 };
 
-const useHttpQuery = (url) => {
+const useHttpQuery = (url, timeout = 0) => {
   return {
     queryKey: [url],
-    queryFn: () => fetchChain(url),
+    queryFn: () => fetchChain(url, timeout),
     refetchInterval,
     select: useCallback((data) => formatData(url, data), []),
   };
@@ -82,7 +87,7 @@ function createPromise() {
   return promise;
 }
 
-const fetchWssChain = async (baseURL) => {
+const fetchWssChain = async (baseURL, timeout = 0) => {
   try {
     // small hack to wait until socket connection opens to show loading indicator on table row
     const queryFn = createPromise();
@@ -112,18 +117,18 @@ const fetchWssChain = async (baseURL) => {
   }
 };
 
-const useSocketQuery = (url) => {
+const useSocketQuery = (url, timeout = 0) => {
   return {
     queryKey: [url],
-    queryFn: () => fetchWssChain(url),
+    queryFn: () => fetchWssChain(url, timeout),
     select: useCallback((data) => formatData(url, data), []),
     refetchInterval,
   };
 };
 
-const useRPCData = (urls) => {
+const useRPCData = (urls, timeout = defaultTimeout) => {
   const queries =
-    urls?.map((url) => (url.url.includes("wss://") ? useSocketQuery(url.url) : useHttpQuery(url.url))) ?? [];
+    urls?.map((url) => (url.url.indexOf("http") < 0 ? useSocketQuery(url.url, timeout) : useHttpQuery(url.url, timeout))) ?? [];
 
   return useQueries({ queries });
 };
